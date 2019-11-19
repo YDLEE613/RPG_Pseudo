@@ -3,46 +3,28 @@ import java.io.*;
 import java.util.*;
 
 public class MainProgram {
-    private static  String TXT_INPUT_FILE_PATH;
-    private static  String TXT_OUTPUT_FILE_PATH;
-    private static  String TXT_OUTPUT_FILE_NAME;
-    private static final String TXT_TABLES = "DISK";
-    private static final String TXT_ENTRY_PARMS = "*ENTRY    PLIST";
-    private static final String STRING_SPACE = " ";
-    private static final String STRING_COMMA = ",";
-    private static final String STRING_SLASH = "/";
-    private static final String STRING_COLON = ":";
-    private static final String STRING_UNDER_SCORE = "_";
-    private static final int INT_TABLE_INDEX = 7;
-
-    private static final String TABLES_HEADER = "*** Tables ***";
-    private static final String ENTRY_PARMS_HEADER = "*** Entry Parms ***";
-    private static final String TEXT_RTV = "RTV";
-    private static final String TEXT_RSQ = "RSQ";
-    private static final String TEXT_PARM = "PARM";
-
-    private static final String END_OF_TABLES = "Long constants";
-    private static final String ENTRY_PARM_DIV = "*****************************************************************";
-
-
+    // alias+logical, physical, actual
     private static Map<String, Map<String, String>> logicalActualTableNames = new HashMap<>();
+
+    // alias+logical, List of key fields with Column Name
+    private static Map<String, List<String>> keyFieldsMap = new HashMap<>();
+
+    private static Map<String, String> fieldColumnNameMap = new HashMap<>();
     private static List<String> parmsList = new ArrayList<>();
     private static FileReader file = null;
     private static BufferedWriter bw;
 
     public static void main(String[] args) throws IOException {
-        TXT_INPUT_FILE_PATH = args[0];
-        file = new FileReader(TXT_INPUT_FILE_PATH);
+        String inputPath = HardCodedValues.getTxtInputFilePath();
+        String outputPath = HardCodedValues.getTxtOutputFilePath();
+        String outputName = HardCodedValues.getTxtOutputFileName();
 
-        TXT_OUTPUT_FILE_PATH = args[1];
-
-        TXT_OUTPUT_FILE_NAME = args[2];
-        bw = new BufferedWriter(new FileWriter(TXT_OUTPUT_FILE_PATH + TXT_OUTPUT_FILE_NAME));
+        file = new FileReader(inputPath);
+        bw = new BufferedWriter(new FileWriter(outputPath + outputName));
 
         processTables();
 
         printParmsList();
-        bw.newLine();
         printTablesMap();
 
         bw.close();
@@ -51,37 +33,51 @@ public class MainProgram {
     private static void processTables() throws IOException {
         BufferedReader br = new BufferedReader(file);
 
-        int count = 0;
         for (String line = br.readLine(); line != null; line = br.readLine()) {
-            if (line.contains(TXT_TABLES)) { // DISK
+            if (line.contains(HardCodedValues.getTxtTables())) { // DISK
                 String logicalTableName = getLogicalTableNames(line);
+                String aliasedLogicalTableName = getAliasTableName(logicalTableName);
+                List<String> keyFieldsNamesTemp = getKeyFields(logicalTableName);
+                List<String> keyFieldsNames = new ArrayList<>();
+
+                if (keyFieldsNamesTemp != null) {
+                    keyFieldsNamesTemp.forEach(each ->{
+                        each = each.concat(HardCodedValues.getStringSlash() + fieldColumnNameMap.get(each) + HardCodedValues.getStringUnderScore());
+                        keyFieldsNames.add(each);
+                    });
+
+                    keyFieldsMap.put(aliasedLogicalTableName, keyFieldsNames);
+                }
 
                 // can find actual table names in next 2 lines
                 line = br.readLine();
-                if (!line.contains(TEXT_RTV) && !line.contains(TEXT_RSQ)) {
+                if (!line.contains(HardCodedValues.getTextRtv()) && !line.contains(HardCodedValues.getTextRtv())) {
 
                     line = br.readLine();
-                    if (line.contains(TEXT_RTV) || line.contains(TEXT_RSQ)) {
+                    if (line.contains(HardCodedValues.getTextRtv()) || line.contains(HardCodedValues.getTextRsq())) {
                         // get actual table name
-                        logicalActualTableNames.put(logicalTableName, Map.of(getPhysicalTableName(logicalTableName), getActualTableNames(line)));
+                        logicalActualTableNames.put(aliasedLogicalTableName, Map.of(getPhysicalTableName(logicalTableName), getActualTableNames(line)));
                     }
                 } else {
                     // get actual table name
-                    logicalActualTableNames.put(logicalTableName, Map.of(getPhysicalTableName(logicalTableName), getActualTableNames(line)));
+                    logicalActualTableNames.put(aliasedLogicalTableName, Map.of(getPhysicalTableName(logicalTableName), getActualTableNames(line)));
                 }
 
-            } else if (line.contains(TXT_ENTRY_PARMS)) {
+            } else if (line.contains(HardCodedValues.getTxtEntryParms())) {
                 // find list of parameters
                 boolean end = false;
 
+                // intentionally read an extra line
+                line = br.readLine();
+
                 for (line = br.readLine(); line != null && !end; line = br.readLine()) {
-                    if (line.contains(TEXT_PARM)) {
-                        // extract parmameter
+                    if (line.contains(HardCodedValues.getTextParm())) {
+//                        // extract parmameter
                         String parmName = getParms(line);
-                        if (!parmName.split(STRING_SLASH)[1].trim().equalsIgnoreCase(STRING_UNDER_SCORE)) {
+                        if (!parmName.split(HardCodedValues.getStringSlash())[0].trim().equalsIgnoreCase(HardCodedValues.getStringUnderScore())) {
                             parmsList.add(parmName);
                         }
-                    } else if (line.contains(ENTRY_PARM_DIV)) {
+                    } else if (line.contains(HardCodedValues.getEntryParmDiv())) {
                         // break out of loop
                         end = true;
                     }
@@ -90,9 +86,90 @@ public class MainProgram {
         }
     }
 
+    private static List<String> getKeyFields(String logicalTableName) throws IOException {
+        List<String> keyFields = null;
+        File[] tables = new File(HardCodedValues.getTxtTablesPath()).listFiles();
+
+        for (int i = 0; i < tables.length; i++) {
+            if (tables[i].getName().contains(logicalTableName)) {
+                // read file
+                keyFields = getKeyFieldNames(tables[i].getName());
+            }
+        }
+        return keyFields;
+    }
+
+    private static List<String> getKeyFieldNames(String fileName) throws IOException {
+        FileReader file = new FileReader(HardCodedValues.getTxtTablesPath() + fileName);
+        List<String> keyFields = new ArrayList<>();
+
+        BufferedReader br = new BufferedReader(file);
+        for (String line = br.readLine(); line != null; line = br.readLine()) {
+            // read lines after TXT_KEY_FIELDS
+            if (line.contains(HardCodedValues.getTxtKeyFields())) {
+
+                // key fields end indicator
+                for (String key = br.readLine(); key != null; key = br.readLine()) {
+                    if (key.contains(HardCodedValues.getTxtKeyFieldsDiv1()) || key.contains(HardCodedValues.getTxtKeyFieldsDiv2())) {
+                        break;
+                    }
+                    key = key.replaceFirst(HardCodedValues.getTextKeySep(), HardCodedValues.getString_AT());
+                    key = key.split(HardCodedValues.getString_AT())[1].trim().split(HardCodedValues.getStringSpace())[0];
+                    keyFields.add(key);
+                }
+            } else if (line.contains(HardCodedValues.getTextText()) && !line.contains(HardCodedValues.getString_AT())) { // get each column
+                String fieldName = line.split(HardCodedValues.getTextText())[0].replaceFirst(HardCodedValues.getTextColSep(), HardCodedValues.getString_AT());
+                fieldName = fieldName.split(HardCodedValues.getString_AT())[1].trim();
+
+                String colName = line.split(HardCodedValues.getTextText())[1];
+                colName = colName.substring(2, colName.length() - 8).trim();
+                colName = colName.substring(0, colName.length() - 2);
+
+                fieldColumnNameMap.put(fieldName, removeSpace(colName));
+            }
+        }
+
+        return keyFields;
+    }
+    private static String removeSpace(String text){
+       return text.replaceAll("\\s" , "");
+    }
+    private static String getAliasTableName(String logicalTableName) throws IOException {
+        File[] tables = new File(HardCodedValues.getTxtTablesPath()).listFiles();
+        String aliasedLogicalName = "";
+
+        for (int i = 0; i < tables.length; i++) {
+            if (tables[i].getName().contains(logicalTableName)) {
+                // read file
+                aliasedLogicalName = getAliasName(tables[i].getName()) + HardCodedValues.getStringSlash() + logicalTableName;
+                break;
+            }
+        }
+        return aliasedLogicalName;
+    }
+
+    private static String getAliasName(String fileName) throws IOException {
+        String aliasName = "";
+        FileReader file = new FileReader(HardCodedValues.getTxtTablesPath() + fileName);
+
+        BufferedReader br = new BufferedReader(file);
+        for (String line = br.readLine(); line != null; line = br.readLine()) {
+            // first line with TEXT has alias name
+            if (line.contains(HardCodedValues.getTextText())) {
+                line = line.replaceFirst(HardCodedValues.getTextAliasSep(), HardCodedValues.getString_AT() + HardCodedValues.getString_AT());
+                aliasName = line.split(HardCodedValues.getString_AT() + HardCodedValues.getString_AT())[1].trim().split(HardCodedValues.getStringSpace())[0];
+
+                // once get the alias name, break
+                break;
+            }
+
+        }
+
+        return aliasName;
+    }
+
     private static void printParmsList() throws IOException {
-//        System.out.println(ENTRY_PARMS_HEADER);
-        bw.write(ENTRY_PARMS_HEADER);
+        bw.write(HardCodedValues.getEntryParmsHeader());
         bw.newLine();
         parmsList.forEach(each -> {
             try {
@@ -102,14 +179,16 @@ public class MainProgram {
                 e.printStackTrace();
             }
         });
+        bw.newLine();
+
     }
 
     private static String getParms(String line) {
         StringBuilder sb = new StringBuilder("");
 
-        sb.append(line.split(TEXT_PARM)[0].split("C")[1].trim() + STRING_SLASH);
+        sb.append(line.split(HardCodedValues.getTextParm())[0].replaceFirst(HardCodedValues.getString_C(), HardCodedValues.getString_AT()).split(HardCodedValues.getString_AT())[1].trim() + HardCodedValues.getStringSlash());
 
-        String[] tmp = line.split(TEXT_PARM)[1].split(" ");
+        String[] tmp = line.split(HardCodedValues.getTextParm())[1].split(HardCodedValues.getStringSpace());
         int spaceCount = 0;
         boolean end = false;
         for (int i = 20; i < tmp.length & !end; i++) {
@@ -118,7 +197,7 @@ public class MainProgram {
                     sb.append(tmp[i]);
                     spaceCount = 0;
                 } else {
-                    sb.append(STRING_UNDER_SCORE);
+                    sb.append(HardCodedValues.getStringUnderScore());
                     end = true;
                 }
             } else {
@@ -129,22 +208,50 @@ public class MainProgram {
     }
 
     private static void printTablesMap() throws IOException {
-        bw.write(TABLES_HEADER);
+        bw.write(HardCodedValues.getTablesHeader());
         bw.newLine();
 
-
-//        System.out.println(TABLES_HEADER);
+        // k: alias + logical name, v: physical name, actual name
         logicalActualTableNames.forEach((k, v) -> {
-            System.out.print(k + STRING_SLASH);
-            v.forEach((a, b) -> {
-                try {
-                    bw.write(a + STRING_SLASH + b + STRING_UNDER_SCORE);
-                    bw.newLine();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-//                System.out.println(a + STRING_SLASH + b + STRING_UNDER_SCORE);
-            });
+            try {
+                bw.write(k + HardCodedValues.getStringSlash());
+
+                // a: physical name, b: actual name
+                v.forEach((a, b) -> {
+                    try {
+                        bw.write(a + HardCodedValues.getStringSlash() + b + HardCodedValues.getStringUnderScore());
+                        bw.newLine();
+
+                        // k: alias + logical name, v: list of key fields
+                        keyFieldsMap.forEach((c, d) -> {
+                            if (c.equalsIgnoreCase(k)) {
+
+                                // add KeysOrderBy text
+                                try {
+                                    bw.write(HardCodedValues.getStringTab() + HardCodedValues.getStringTab() + HardCodedValues.getTxtKeysOrderBy());
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+
+                                // append each key
+                                d.forEach(each -> {
+                                    try {
+                                        bw.write(each + HardCodedValues.getStringTab());
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                });
+                            }
+                        });
+
+                        bw.newLine();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         });
     }
 
@@ -153,17 +260,17 @@ public class MainProgram {
     }
 
     private static String getLogicalTableNames(String line) {
-        return line.split(STRING_SPACE)[INT_TABLE_INDEX].substring(1, line.split(STRING_SPACE)[INT_TABLE_INDEX].length() - 2);
+        return line.split(HardCodedValues.getStringSpace())[HardCodedValues.getIntTableIndex()].substring(1, line.split(HardCodedValues.getStringSpace())[HardCodedValues.getIntTableIndex()].length() - 2);
     }
 
     private static String getActualTableNames(String line) {
-        String[] splittedLine = line.split(STRING_COLON)[1].trim().split(STRING_SPACE);
+        String[] splittedLine = line.split(HardCodedValues.getStringColon())[1].trim().split(HardCodedValues.getStringSpace());
 
         int spaceCount = 0;
         String physicalName = "";
         for (int i = 0; i < splittedLine.length; i++) {
 
-            if (splittedLine[i].isEmpty() || splittedLine[i].isBlank() || splittedLine[i].equalsIgnoreCase(STRING_SPACE)) {
+            if (splittedLine[i].isEmpty() || splittedLine[i].isBlank() || splittedLine[i].equalsIgnoreCase(HardCodedValues.getStringSpace())) {
                 spaceCount++;
 
                 if (spaceCount >= 2) {
