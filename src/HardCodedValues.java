@@ -1,7 +1,7 @@
 public class HardCodedValues {
     private static String TXT_INPUT_FILE_PATH = "program/ECXDDFR_QRPGSRC_SMLSYNSRC_DAT.txt";
     private static String TXT_OUTPUT_FILE_PATH = "C:/Users/donny/IdeaProjects/RPG_Pseudo/";
-    private static String TXT_OUTPUT_FILE_NAME = "fileOutputTest";
+    private static String TXT_Pseudo = "Psuedo_";
     private static String TXT_TABLES_PATH = "tables/";
     private static String TXT_KEYS_ORDER_BY = "KeysOrderBy: ";
     private static final String TXT_TABLES = "DISK";
@@ -33,6 +33,10 @@ public class HardCodedValues {
 
     public static String getTextColSep() {
         return TEXT_COL_SEP;
+    }
+
+    public static String getTXT_Pseudo() {
+        return TXT_Pseudo;
     }
 
     public static String getStringTab() {
@@ -82,10 +86,6 @@ public class HardCodedValues {
 
     public static String getTxtOutputFilePath() {
         return TXT_OUTPUT_FILE_PATH;
-    }
-
-    public static String getTxtOutputFileName() {
-        return TXT_OUTPUT_FILE_NAME;
     }
 
     public static String getTxtTables() {

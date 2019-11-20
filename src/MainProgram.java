@@ -10,23 +10,26 @@ public class MainProgram {
     private static Map<String, List<String>> keyFieldsMap = new HashMap<>();
 
     private static Map<String, String> fieldColumnNameMap = new HashMap<>();
+    private static Map<String, String> columnFieldNameMap = new HashMap<>();
+
+    //<table name, <columnName, condition>>
+    private static Map<String, List<Criteria>> tableColumnConditionMap = new HashMap<>();
     private static List<String> parmsList = new ArrayList<>();
     private static FileReader file = null;
     private static BufferedWriter bw;
+    private static String outputFileName = "";
 
     public static void main(String[] args) throws IOException {
         String inputPath = HardCodedValues.getTxtInputFilePath();
         String outputPath = HardCodedValues.getTxtOutputFilePath();
-        String outputName = HardCodedValues.getTxtOutputFileName();
 
         file = new FileReader(inputPath);
-        bw = new BufferedWriter(new FileWriter(outputPath + outputName));
-
+        FileWriter fw = new FileWriter(outputPath + HardCodedValues.getTXT_Pseudo() + outputFileName);
         processTables();
 
+        bw = new BufferedWriter(fw);
         printParmsList();
         printTablesMap();
-
         bw.close();
     }
 
@@ -56,6 +59,7 @@ public class MainProgram {
                     line = br.readLine();
                     if (line.contains(HardCodedValues.getTextRtv()) || line.contains(HardCodedValues.getTextRsq())) {
                         // get actual table name
+                        outputFileName = getPhysicalTableName(logicalTableName);
                         logicalActualTableNames.put(aliasedLogicalTableName, Map.of(getPhysicalTableName(logicalTableName), getActualTableNames(line)));
                     }
                 } else {
@@ -102,10 +106,11 @@ public class MainProgram {
     private static List<String> getKeyFieldNames(String fileName) throws IOException {
         FileReader file = new FileReader(HardCodedValues.getTxtTablesPath() + fileName);
         List<String> keyFields = new ArrayList<>();
+        List<Criteria> criteriaList = new ArrayList<>();
 
         BufferedReader br = new BufferedReader(file);
         for (String line = br.readLine(); line != null; line = br.readLine()) {
-            // read lines after TXT_KEY_FIELDS
+            // store keyfields in list
             if (line.contains(HardCodedValues.getTxtKeyFields())) {
 
                 // key fields end indicator
@@ -117,7 +122,9 @@ public class MainProgram {
                     key = key.split(HardCodedValues.getString_AT())[1].trim().split(HardCodedValues.getStringSpace())[0];
                     keyFields.add(key);
                 }
-            } else if (line.contains(HardCodedValues.getTextText()) && !line.contains(HardCodedValues.getString_AT())) { // get each column
+            }
+            // store fields in map
+            else if (line.contains(HardCodedValues.getTextText()) && !line.contains(HardCodedValues.getString_AT())) { // get each column
                 String fieldName = line.split(HardCodedValues.getTextText())[0].replaceFirst(HardCodedValues.getTextColSep(), HardCodedValues.getString_AT());
                 fieldName = fieldName.split(HardCodedValues.getString_AT())[1].trim();
 
@@ -126,8 +133,26 @@ public class MainProgram {
                 colName = colName.substring(0, colName.length() - 2);
 
                 fieldColumnNameMap.put(fieldName, removeSpace(colName));
+                columnFieldNameMap.put(colName, fieldName);
+            }else if(removeSpace(line).contains("Field")){
+                String column = "";
+                String cond = "";
+
+                if(removeSpace(line).contains("Field")){
+                    line = line.split(HardCodedValues.getStringColon())[1].trim();
+                    column = line.substring(0, line.length()-8).trim();
+                }
+
+                line = br.readLine();
+                if(removeSpace(line).contains("Condition:")){
+                    line = line.split(HardCodedValues.getStringColon())[1].trim();
+                    cond = line.substring(0, line.length()-8).trim().replaceAll("[^a-zA-Z0-9]", "");
+                }
+
+                criteriaList.add(new Criteria(column, cond));
             }
         }
+        tableColumnConditionMap.put(getAliasName(fileName), criteriaList);
 
         return keyFields;
     }
@@ -243,8 +268,23 @@ public class MainProgram {
                                 });
                             }
                         });
-
                         bw.newLine();
+
+                        // add criteria
+                        tableColumnConditionMap.forEach((table,criteriaList)->{
+                            if(k.contains(table)){
+                                criteriaList.forEach(each->{
+                                    try {
+                                        bw.write(HardCodedValues.getStringTab() + HardCodedValues.getStringTab()+ "  -  "
+                                        + columnFieldNameMap.get(each.getField()) + HardCodedValues.getStringSlash() + removeSpace(each.getField()) + HardCodedValues.getStringUnderScore()
+                                        + HardCodedValues.getStringSpace() + " = " + HardCodedValues.getStringSpace() + each.getCondition());
+                                        bw.newLine();
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                });
+                            }
+                        });
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
